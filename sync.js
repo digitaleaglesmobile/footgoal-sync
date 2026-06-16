@@ -53,18 +53,28 @@ async function publishItems(collectionId, itemIds) {
   return res.json();
 }
 
+// Deduplicate standings — keep row with highest played_games per team
+function deduplicateStandings(standings) {
+  const best = new Map();
+  for (const row of standings) {
+    const key = row.team_name.toLowerCase();
+    if (!best.has(key) || row.played_games > best.get(key).played_games) {
+      best.set(key, row);
+    }
+  }
+  return Array.from(best.values());
+}
+
 async function syncStandings(standings) {
   console.log('🌐 Updating Group Standings collection...');
+  const unique = deduplicateStandings(standings);
   const items = await getWebflowItems(STANDINGS_COLLECTION);
   const byName = {};
   for (const item of items) { byName[item.fieldData.name.trim().toLowerCase()] = item; }
   const updatedIds = [];
-  const seen = new Set();
-  for (const row of standings) {
+  for (const row of unique) {
     const apiName = NAME_MAP[row.team_name] || row.team_name;
     const key = apiName.trim().toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
     const item = byName[key];
     if (!item) { console.warn(`⚠️ No standing match: "${row.team_name}"`); continue; }
     try {
@@ -79,28 +89,20 @@ async function syncStandings(standings) {
 
 async function syncTeamsCollection(standings) {
   console.log('🌐 Updating Teams [Countries] collection (Groups page)...');
+  const unique = deduplicateStandings(standings);
   const items = await getWebflowItems(TEAMS_COLLECTION);
   const byName = {};
   for (const item of items) { byName[item.fieldData.name.trim().toLowerCase()] = item; }
   const updatedIds = [];
-  const seen = new Set();
-  for (const row of standings) {
+  for (const row of unique) {
     const apiName = NAME_MAP[row.team_name] || row.team_name;
     const key = apiName.trim().toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
     const item = byName[key];
     if (!item) { console.warn(`⚠️ No team match: "${row.team_name}"`); continue; }
     try {
       await updateWebflowItem(TEAMS_COLLECTION, item.id, {
-        'match-play': row.played_games,
-        'win': row.won,
-        'draw': row.draw,
-        'lose': row.lost,
-        'gaols': row.goals_for,
-        'ga': row.goals_against,
-        'gd': row.goal_difference,
-        'pts': row.points
+        'match-play': row.played_games, 'win': row.won, 'draw': row.draw, 'lose': row.lost,
+        'gaols': row.goals_for, 'ga': row.goals_against, 'gd': row.goal_difference, 'pts': row.points
       });
       updatedIds.push(item.id);
       console.log(`✅ Team: ${apiName} Pts:${row.points}`);
@@ -118,8 +120,7 @@ async function syncMatches(apiMatches) {
     const t1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase();
     const t2 = (item.fieldData['team-2-name'] || '').trim().toLowerCase();
     if (t1 && t2 && t1 !== 'tbd' && t2 !== 'tbd') {
-      const key = [t1, t2].sort().join('|');
-      byTeams[key] = item;
+      byTeams[[t1, t2].sort().join('|')] = item;
     }
   }
   const updatedIds = [];
@@ -127,19 +128,16 @@ async function syncMatches(apiMatches) {
     if (m.status !== 'FINISHED') continue;
     const homeName = (NAME_MAP[m.homeTeam.name] || m.homeTeam.name).trim().toLowerCase();
     const awayName = (NAME_MAP[m.awayTeam.name] || m.awayTeam.name).trim().toLowerCase();
-    const key = [homeName, awayName].sort().join('|');
-    const item = byTeams[key];
-    if (!item) { console.warn(`⚠️ No match item for: ${m.homeTeam.name} vs ${m.awayTeam.name}`); continue; }
-    const cmsT1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase();
-    const isHomeTeam1 = cmsT1 === homeName;
+    const item = byTeams[[homeName, awayName].sort().join('|')];
+    if (!item) { console.warn(`⚠️ No match: ${m.homeTeam.name} vs ${m.awayTeam.name}`); continue; }
+    const isHomeTeam1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase() === homeName;
     const homeScore = m.score?.fullTime?.home ?? null;
     const awayScore = m.score?.fullTime?.away ?? null;
     try {
       await updateWebflowItem(MATCHES_COLLECTION, item.id, {
         'team-1-score': String(isHomeTeam1 ? homeScore : awayScore),
         'team-2-score': String(isHomeTeam1 ? awayScore : homeScore),
-        'past-matches': true,
-        'match-status': 'Finished'
+        'past-matches': true, 'match-status': 'Finished'
       });
       updatedIds.push(item.id);
       console.log(`✅ Match: ${m.homeTeam.name} ${homeScore}-${awayScore} ${m.awayTeam.name}`);
