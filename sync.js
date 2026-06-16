@@ -3,6 +3,7 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const WEBFLOW_TOKEN = process.env.WEBFLOW_TOKEN;
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY;
 const STANDINGS_COLLECTION = '69cb7c96b9d6bf4780c3453e';
+const TEAMS_COLLECTION = '69c4f95dec4f2729a75d16cf';
 const MATCHES_COLLECTION = '69d602cd83a7134a6382aede';
 
 const NAME_MAP = {
@@ -53,11 +54,10 @@ async function publishItems(collectionId, itemIds) {
 }
 
 async function syncStandings(standings) {
-  console.log('🌐 Updating Webflow standings...');
+  console.log('🌐 Updating Group Standings collection...');
   const items = await getWebflowItems(STANDINGS_COLLECTION);
   const byName = {};
   for (const item of items) { byName[item.fieldData.name.trim().toLowerCase()] = item; }
-
   const updatedIds = [];
   const seen = new Set();
   for (const row of standings) {
@@ -68,11 +68,7 @@ async function syncStandings(standings) {
     const item = byName[key];
     if (!item) { console.warn(`⚠️ No standing match: "${row.team_name}"`); continue; }
     try {
-      await updateWebflowItem(STANDINGS_COLLECTION, item.id, {
-        played: row.played_games, won: row.won, drawn: row.draw, lost: row.lost,
-        'goals-for': row.goals_for, 'goals-against': row.goals_against,
-        points: row.points, mp: row.played_games
-      });
+      await updateWebflowItem(STANDINGS_COLLECTION, item.id, { played: row.played_games, won: row.won, drawn: row.draw, lost: row.lost, 'goals-for': row.goals_for, 'goals-against': row.goals_against, points: row.points, mp: row.played_games });
       updatedIds.push(item.id);
       console.log(`✅ Standing: ${apiName} Pts:${row.points}`);
       await new Promise(r => setTimeout(r, 1100));
@@ -81,10 +77,42 @@ async function syncStandings(standings) {
   if (updatedIds.length > 0) { await publishItems(STANDINGS_COLLECTION, updatedIds); console.log(`✅ Published ${updatedIds.length} standings`); }
 }
 
+async function syncTeamsCollection(standings) {
+  console.log('🌐 Updating Teams [Countries] collection (Groups page)...');
+  const items = await getWebflowItems(TEAMS_COLLECTION);
+  const byName = {};
+  for (const item of items) { byName[item.fieldData.name.trim().toLowerCase()] = item; }
+  const updatedIds = [];
+  const seen = new Set();
+  for (const row of standings) {
+    const apiName = NAME_MAP[row.team_name] || row.team_name;
+    const key = apiName.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const item = byName[key];
+    if (!item) { console.warn(`⚠️ No team match: "${row.team_name}"`); continue; }
+    try {
+      await updateWebflowItem(TEAMS_COLLECTION, item.id, {
+        'match-play': row.played_games,
+        'win': row.won,
+        'draw': row.draw,
+        'lose': row.lost,
+        'gaols': row.goals_for,
+        'ga': row.goals_against,
+        'gd': row.goal_difference,
+        'pts': row.points
+      });
+      updatedIds.push(item.id);
+      console.log(`✅ Team: ${apiName} Pts:${row.points}`);
+      await new Promise(r => setTimeout(r, 1100));
+    } catch (err) { console.error(`❌ Team ${row.team_name}: ${err.message}`); }
+  }
+  if (updatedIds.length > 0) { await publishItems(TEAMS_COLLECTION, updatedIds); console.log(`✅ Published ${updatedIds.length} teams`); }
+}
+
 async function syncMatches(apiMatches) {
   console.log('⚽ Updating Webflow match scores...');
   const items = await getWebflowItems(MATCHES_COLLECTION);
-
   const byTeams = {};
   for (const item of items) {
     const t1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase();
@@ -94,7 +122,6 @@ async function syncMatches(apiMatches) {
       byTeams[key] = item;
     }
   }
-
   const updatedIds = [];
   for (const m of apiMatches) {
     if (m.status !== 'FINISHED') continue;
@@ -103,12 +130,10 @@ async function syncMatches(apiMatches) {
     const key = [homeName, awayName].sort().join('|');
     const item = byTeams[key];
     if (!item) { console.warn(`⚠️ No match item for: ${m.homeTeam.name} vs ${m.awayTeam.name}`); continue; }
-
     const cmsT1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase();
     const isHomeTeam1 = cmsT1 === homeName;
     const homeScore = m.score?.fullTime?.home ?? null;
     const awayScore = m.score?.fullTime?.away ?? null;
-
     try {
       await updateWebflowItem(MATCHES_COLLECTION, item.id, {
         'team-1-score': String(isHomeTeam1 ? homeScore : awayScore),
@@ -150,6 +175,7 @@ async function main() {
   await supabaseUpsert('matches', Array.from(matchesMap.values()));
 
   await syncStandings(standings);
+  await syncTeamsCollection(standings);
   await syncMatches(matchData.matches);
 
   console.log('🎉 Sync complete!');
