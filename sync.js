@@ -53,32 +53,26 @@ async function publishItems(collectionId, itemIds) {
   return res.json();
 }
 
-// Deduplicate standings — keep row with highest played_games per team
-function deduplicateStandings(standings) {
-  const best = new Map();
-  for (const row of standings) {
-    const key = row.team_name.toLowerCase();
-    if (!best.has(key) || row.played_games > best.get(key).played_games) {
-      best.set(key, row);
-    }
-  }
-  return Array.from(best.values());
-}
-
 async function syncStandings(standings) {
   console.log('🌐 Updating Group Standings collection...');
-  const unique = deduplicateStandings(standings);
   const items = await getWebflowItems(STANDINGS_COLLECTION);
   const byName = {};
   for (const item of items) { byName[item.fieldData.name.trim().toLowerCase()] = item; }
   const updatedIds = [];
-  for (const row of unique) {
+  const seen = new Set();
+  for (const row of standings) {
     const apiName = NAME_MAP[row.team_name] || row.team_name;
     const key = apiName.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     const item = byName[key];
     if (!item) { console.warn(`⚠️ No standing match: "${row.team_name}"`); continue; }
     try {
-      await updateWebflowItem(STANDINGS_COLLECTION, item.id, { played: row.played_games, won: row.won, drawn: row.draw, lost: row.lost, 'goals-for': row.goals_for, 'goals-against': row.goals_against, points: row.points, mp: row.played_games });
+      await updateWebflowItem(STANDINGS_COLLECTION, item.id, {
+        played: row.played_games, won: row.won, drawn: row.draw, lost: row.lost,
+        'goals-for': row.goals_for, 'goals-against': row.goals_against,
+        points: row.points, mp: row.played_games
+      });
       updatedIds.push(item.id);
       console.log(`✅ Standing: ${apiName} Pts:${row.points}`);
       await new Promise(r => setTimeout(r, 1100));
@@ -89,14 +83,16 @@ async function syncStandings(standings) {
 
 async function syncTeamsCollection(standings) {
   console.log('🌐 Updating Teams [Countries] collection (Groups page)...');
-  const unique = deduplicateStandings(standings);
   const items = await getWebflowItems(TEAMS_COLLECTION);
   const byName = {};
   for (const item of items) { byName[item.fieldData.name.trim().toLowerCase()] = item; }
   const updatedIds = [];
-  for (const row of unique) {
+  const seen = new Set();
+  for (const row of standings) {
     const apiName = NAME_MAP[row.team_name] || row.team_name;
     const key = apiName.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     const item = byName[key];
     if (!item) { console.warn(`⚠️ No team match: "${row.team_name}"`); continue; }
     try {
@@ -152,15 +148,30 @@ async function main() {
 
   console.log('📊 Fetching WC standings...');
   const standingsData = await footballFetch('/competitions/WC/standings?season=2026');
+
+  // ✅ KEY FIX: Only use TOTAL standings, not HOME or AWAY
+  const totalStanding = standingsData.standings.find(s => s.type === 'TOTAL');
+  const standingsToUse = totalStanding ? [totalStanding] : standingsData.standings;
+
   const teamsMap = new Map();
   const standings = [];
-  for (const standing of standingsData.standings) {
+  for (const standing of standingsToUse) {
     for (const entry of standing.table) {
       const team = entry.team;
       if (!teamsMap.has(team.id)) teamsMap.set(team.id, { id: team.id, name: team.name, short_name: team.shortName, tla: team.tla, crest: team.crest });
-      standings.push({ competition_code: 'WC', season: 2026, group_name: standing.group, team_id: team.id, team_name: team.name, team_crest: team.crest, position: entry.position, played_games: entry.playedGames, won: entry.won, draw: entry.draw, lost: entry.lost, goals_for: entry.goalsFor, goals_against: entry.goalsAgainst, goal_difference: entry.goalDifference, points: entry.points, updated_at: new Date().toISOString() });
+      standings.push({
+        competition_code: 'WC', season: 2026, group_name: standing.group,
+        team_id: team.id, team_name: team.name, team_crest: team.crest,
+        position: entry.position, played_games: entry.playedGames,
+        won: entry.won, draw: entry.draw, lost: entry.lost,
+        goals_for: entry.goalsFor, goals_against: entry.goalsAgainst,
+        goal_difference: entry.goalDifference, points: entry.points,
+        updated_at: new Date().toISOString()
+      });
     }
   }
+
+  console.log(`📊 Using ${standings.length} standings rows from TOTAL type`);
   await supabaseUpsert('teams', Array.from(teamsMap.values()));
   await supabaseUpsert('standings', standings);
 
@@ -168,7 +179,15 @@ async function main() {
   const matchData = await footballFetch('/competitions/WC/matches?season=2026');
   const matchesMap = new Map();
   for (const m of matchData.matches) {
-    matchesMap.set(m.id, { id: m.id, competition_code: 'WC', season: 2026, matchday: m.matchday, stage: m.stage, group_name: m.group, status: m.status, utc_date: m.utcDate, home_team_id: m.homeTeam.id, home_team_name: m.homeTeam.name, home_team_crest: m.homeTeam.crest, away_team_id: m.awayTeam.id, away_team_name: m.awayTeam.name, away_team_crest: m.awayTeam.crest, home_score: m.score?.fullTime?.home ?? null, away_score: m.score?.fullTime?.away ?? null, winner: m.score?.winner ?? null, updated_at: new Date().toISOString() });
+    matchesMap.set(m.id, {
+      id: m.id, competition_code: 'WC', season: 2026,
+      matchday: m.matchday, stage: m.stage, group_name: m.group,
+      status: m.status, utc_date: m.utcDate,
+      home_team_id: m.homeTeam.id, home_team_name: m.homeTeam.name, home_team_crest: m.homeTeam.crest,
+      away_team_id: m.awayTeam.id, away_team_name: m.awayTeam.name, away_team_crest: m.awayTeam.crest,
+      home_score: m.score?.fullTime?.home ?? null, away_score: m.score?.fullTime?.away ?? null,
+      winner: m.score?.winner ?? null, updated_at: new Date().toISOString()
+    });
   }
   await supabaseUpsert('matches', Array.from(matchesMap.values()));
 
