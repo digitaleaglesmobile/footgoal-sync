@@ -53,6 +53,42 @@ async function publishItems(collectionId, itemIds) {
   return res.json();
 }
 
+// Calculate accurate stats from match results directly
+function calculateStatsFromMatches(standings, matches) {
+  // Build a map of team stats from finished matches
+  const statsFromMatches = new Map();
+
+  for (const m of matches) {
+    if (m.status !== 'FINISHED') continue;
+    const homeId = m.homeTeam.id;
+    const awayId = m.awayTeam.id;
+    const homeScore = m.score?.fullTime?.home ?? 0;
+    const awayScore = m.score?.fullTime?.away ?? 0;
+
+    if (!statsFromMatches.has(homeId)) statsFromMatches.set(homeId, { goals_for: 0, goals_against: 0 });
+    if (!statsFromMatches.has(awayId)) statsFromMatches.set(awayId, { goals_for: 0, goals_against: 0 });
+
+    statsFromMatches.get(homeId).goals_for += homeScore;
+    statsFromMatches.get(homeId).goals_against += awayScore;
+    statsFromMatches.get(awayId).goals_for += awayScore;
+    statsFromMatches.get(awayId).goals_against += homeScore;
+  }
+
+  // Override standings goals with match-calculated goals
+  return standings.map(row => {
+    const matchStats = statsFromMatches.get(row.team_id);
+    if (matchStats) {
+      return {
+        ...row,
+        goals_for: matchStats.goals_for,
+        goals_against: matchStats.goals_against,
+        goal_difference: matchStats.goals_for - matchStats.goals_against
+      };
+    }
+    return row;
+  });
+}
+
 async function syncStandings(standings) {
   console.log('🌐 Updating Group Standings collection...');
   const items = await getWebflowItems(STANDINGS_COLLECTION);
@@ -74,7 +110,7 @@ async function syncStandings(standings) {
         points: row.points, mp: row.played_games
       });
       updatedIds.push(item.id);
-      console.log(`✅ Standing: ${apiName} Pts:${row.points}`);
+      console.log(`✅ Standing: ${apiName} P${row.played_games} W${row.won} D${row.draw} L${row.lost} GF${row.goals_for} GA${row.goals_against} Pts${row.points}`);
       await new Promise(r => setTimeout(r, 1100));
     } catch (err) { console.error(`❌ Standing ${row.team_name}: ${err.message}`); }
   }
@@ -101,7 +137,7 @@ async function syncTeamsCollection(standings) {
         'gaols': row.goals_for, 'ga': row.goals_against, 'gd': row.goal_difference, 'pts': row.points
       });
       updatedIds.push(item.id);
-      console.log(`✅ Team: ${apiName} Pts:${row.points}`);
+      console.log(`✅ Team: ${apiName} GF${row.goals_for} GA${row.goals_against} Pts${row.points}`);
       await new Promise(r => setTimeout(r, 1100));
     } catch (err) { console.error(`❌ Team ${row.team_name}: ${err.message}`); }
   }
@@ -149,9 +185,12 @@ async function main() {
   console.log('📊 Fetching WC standings...');
   const standingsData = await footballFetch('/competitions/WC/standings?season=2026');
 
-  // ✅ KEY FIX: Only use TOTAL standings, not HOME or AWAY
-  const totalStanding = standingsData.standings.find(s => s.type === 'TOTAL');
-  const standingsToUse = totalStanding ? [totalStanding] : standingsData.standings;
+  // Only use TOTAL standings type
+  const totalStandings = standingsData.standings.filter(s => s.type === 'TOTAL');
+  const standingsToUse = totalStandings.length > 0 ? totalStandings : standingsData.standings;
+
+  console.log('⚽ Fetching WC matches...');
+  const matchData = await footballFetch('/competitions/WC/matches?season=2026');
 
   const teamsMap = new Map();
   const standings = [];
@@ -171,12 +210,13 @@ async function main() {
     }
   }
 
-  console.log(`📊 Using ${standings.length} standings rows from TOTAL type`);
-  await supabaseUpsert('teams', Array.from(teamsMap.values()));
-  await supabaseUpsert('standings', standings);
+  // Fix goals using actual match scores
+  const correctedStandings = calculateStatsFromMatches(standings, matchData.matches);
+  console.log(`📊 Processing ${correctedStandings.length} standings with match-corrected goals`);
 
-  console.log('⚽ Fetching WC matches...');
-  const matchData = await footballFetch('/competitions/WC/matches?season=2026');
+  await supabaseUpsert('teams', Array.from(teamsMap.values()));
+  await supabaseUpsert('standings', correctedStandings);
+
   const matchesMap = new Map();
   for (const m of matchData.matches) {
     matchesMap.set(m.id, {
@@ -191,8 +231,8 @@ async function main() {
   }
   await supabaseUpsert('matches', Array.from(matchesMap.values()));
 
-  await syncStandings(standings);
-  await syncTeamsCollection(standings);
+  await syncStandings(correctedStandings);
+  await syncTeamsCollection(correctedStandings);
   await syncMatches(matchData.matches);
 
   console.log('🎉 Sync complete!');
