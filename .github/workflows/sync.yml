@@ -2,7 +2,7 @@ name: Footgoal Data Sync
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # Every 3 hours
+    - cron: '*/15 * * * *'  # Every 15 minutes
   workflow_dispatch:        # Manual trigger button in GitHub
 
 jobs:
