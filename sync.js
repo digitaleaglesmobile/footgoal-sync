@@ -68,7 +68,11 @@ async function syncStandings(standings) {
     const item = byName[key];
     if (!item) { console.warn(`⚠️ No standing match: "${row.team_name}"`); continue; }
     try {
-      await updateWebflowItem(STANDINGS_COLLECTION, item.id, { played: row.played_games, won: row.won, drawn: row.draw, lost: row.lost, 'goals-for': row.goals_for, 'goals-against': row.goals_against, points: row.points, mp: row.played_games });
+      await updateWebflowItem(STANDINGS_COLLECTION, item.id, {
+        played: row.played_games, won: row.won, drawn: row.draw, lost: row.lost,
+        'goals-for': row.goals_for, 'goals-against': row.goals_against,
+        points: row.points, mp: row.played_games
+      });
       updatedIds.push(item.id);
       console.log(`✅ Standing: ${apiName} Pts:${row.points}`);
       await new Promise(r => setTimeout(r, 1100));
@@ -81,7 +85,6 @@ async function syncMatches(apiMatches) {
   console.log('⚽ Updating Webflow match scores...');
   const items = await getWebflowItems(MATCHES_COLLECTION);
 
-  // Build lookup by team names (normalize both)
   const byTeams = {};
   for (const item of items) {
     const t1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase();
@@ -101,7 +104,6 @@ async function syncMatches(apiMatches) {
     const item = byTeams[key];
     if (!item) { console.warn(`⚠️ No match item for: ${m.homeTeam.name} vs ${m.awayTeam.name}`); continue; }
 
-    // Figure out which team is team-1 and team-2 in CMS
     const cmsT1 = (item.fieldData['team-1-name'] || '').trim().toLowerCase();
     const isHomeTeam1 = cmsT1 === homeName;
     const homeScore = m.score?.fullTime?.home ?? null;
@@ -109,8 +111,8 @@ async function syncMatches(apiMatches) {
 
     try {
       await updateWebflowItem(MATCHES_COLLECTION, item.id, {
-        'team-1-score': isHomeTeam1 ? homeScore : awayScore,
-        'team-2-score': isHomeTeam1 ? awayScore : homeScore,
+        'team-1-score': String(isHomeTeam1 ? homeScore : awayScore),
+        'team-2-score': String(isHomeTeam1 ? awayScore : homeScore),
         'past-matches': true,
         'match-status': 'Finished'
       });
@@ -125,7 +127,6 @@ async function syncMatches(apiMatches) {
 async function main() {
   console.log('🔄 Starting footgoal.co sync...');
 
-  // Fetch standings
   console.log('📊 Fetching WC standings...');
   const standingsData = await footballFetch('/competitions/WC/standings?season=2026');
   const teamsMap = new Map();
@@ -140,7 +141,6 @@ async function main() {
   await supabaseUpsert('teams', Array.from(teamsMap.values()));
   await supabaseUpsert('standings', standings);
 
-  // Fetch matches
   console.log('⚽ Fetching WC matches...');
   const matchData = await footballFetch('/competitions/WC/matches?season=2026');
   const matchesMap = new Map();
@@ -149,7 +149,6 @@ async function main() {
   }
   await supabaseUpsert('matches', Array.from(matchesMap.values()));
 
-  // Update Webflow
   await syncStandings(standings);
   await syncMatches(matchData.matches);
 
