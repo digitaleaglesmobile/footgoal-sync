@@ -134,7 +134,7 @@ async function syncTeamsCollection(standings) {
     try {
       await updateWebflowItem(TEAMS_COLLECTION, item.id, {
         'match-play': row.played_games, 'win': row.won, 'draw': row.draw, 'lose': row.lost,
-        'gaols': row.goals_for, 'ga': row.goals_against, 'gd': row.goal_difference, 'pts': row.points
+        'gaols': row.points, 'ga': row.goals_against, 'gd': row.goal_difference, 'pts': row.goals_for
       });
       updatedIds.push(item.id);
       console.log(`✅ Team: ${apiName} GF${row.goals_for} GA${row.goals_against} Pts${row.points}`);
