@@ -12,6 +12,8 @@ const NAME_MAP = {
   'South Korea': 'Korea Republic', "Côte d'Ivoire": 'Ivory Coast',
 };
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function footballFetch(path) {
   const res = await fetch(`https://api.football-data.org/v4${path}`, { headers: { 'X-Auth-Token': FOOTBALL_API_KEY } });
   if (!res.ok) throw new Error(`Football API error: ${res.status}`);
@@ -29,9 +31,21 @@ async function supabaseUpsert(table, data) {
 }
 
 async function getWebflowItems(collectionId) {
-  const res = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items?limit=100`, { headers: { 'Authorization': `Bearer ${WEBFLOW_TOKEN}`, 'accept': 'application/json' } });
-  const data = await res.json();
-  return data.items;
+  // Retry up to 3 times on rate limit
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items?limit=100`, {
+      headers: { 'Authorization': `Bearer ${WEBFLOW_TOKEN}`, 'accept': 'application/json' }
+    });
+    if (res.status === 429) {
+      console.warn(`⏳ Webflow rate limit on GET items, waiting 60s... (attempt ${attempt})`);
+      await sleep(60000);
+      continue;
+    }
+    if (!res.ok) throw new Error(`Webflow GET items: ${res.status}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+  throw new Error('Webflow GET items: failed after 3 attempts');
 }
 
 async function updateWebflowItem(collectionId, itemId, fieldData) {
@@ -53,37 +67,25 @@ async function publishItems(collectionId, itemIds) {
   return res.json();
 }
 
-// Calculate accurate stats from match results directly
 function calculateStatsFromMatches(standings, matches) {
-  // Build a map of team stats from finished matches
   const statsFromMatches = new Map();
-
   for (const m of matches) {
     if (m.status !== 'FINISHED') continue;
     const homeId = m.homeTeam.id;
     const awayId = m.awayTeam.id;
     const homeScore = m.score?.fullTime?.home ?? 0;
     const awayScore = m.score?.fullTime?.away ?? 0;
-
     if (!statsFromMatches.has(homeId)) statsFromMatches.set(homeId, { goals_for: 0, goals_against: 0 });
     if (!statsFromMatches.has(awayId)) statsFromMatches.set(awayId, { goals_for: 0, goals_against: 0 });
-
     statsFromMatches.get(homeId).goals_for += homeScore;
     statsFromMatches.get(homeId).goals_against += awayScore;
     statsFromMatches.get(awayId).goals_for += awayScore;
     statsFromMatches.get(awayId).goals_against += homeScore;
   }
-
-  // Override standings goals with match-calculated goals
   return standings.map(row => {
     const matchStats = statsFromMatches.get(row.team_id);
     if (matchStats) {
-      return {
-        ...row,
-        goals_for: matchStats.goals_for,
-        goals_against: matchStats.goals_against,
-        goal_difference: matchStats.goals_for - matchStats.goals_against
-      };
+      return { ...row, goals_for: matchStats.goals_for, goals_against: matchStats.goals_against, goal_difference: matchStats.goals_for - matchStats.goals_against };
     }
     return row;
   });
@@ -111,7 +113,7 @@ async function syncStandings(standings) {
       });
       updatedIds.push(item.id);
       console.log(`✅ Standing: ${apiName} P${row.played_games} W${row.won} D${row.draw} L${row.lost} GF${row.goals_for} GA${row.goals_against} Pts${row.points}`);
-      await new Promise(r => setTimeout(r, 1100));
+      await sleep(1200);
     } catch (err) { console.error(`❌ Standing ${row.team_name}: ${err.message}`); }
   }
   if (updatedIds.length > 0) { await publishItems(STANDINGS_COLLECTION, updatedIds); console.log(`✅ Published ${updatedIds.length} standings`); }
@@ -138,7 +140,7 @@ async function syncTeamsCollection(standings) {
       });
       updatedIds.push(item.id);
       console.log(`✅ Team: ${apiName} GF${row.goals_for} GA${row.goals_against} Pts${row.points}`);
-      await new Promise(r => setTimeout(r, 1100));
+      await sleep(1200);
     } catch (err) { console.error(`❌ Team ${row.team_name}: ${err.message}`); }
   }
   if (updatedIds.length > 0) { await publishItems(TEAMS_COLLECTION, updatedIds); console.log(`✅ Published ${updatedIds.length} teams`); }
@@ -173,7 +175,7 @@ async function syncMatches(apiMatches) {
       });
       updatedIds.push(item.id);
       console.log(`✅ Match: ${m.homeTeam.name} ${homeScore}-${awayScore} ${m.awayTeam.name}`);
-      await new Promise(r => setTimeout(r, 1100));
+      await sleep(1200);
     } catch (err) { console.error(`❌ Match ${m.homeTeam.name} vs ${m.awayTeam.name}: ${err.message}`); }
   }
   if (updatedIds.length > 0) { await publishItems(MATCHES_COLLECTION, updatedIds); console.log(`✅ Published ${updatedIds.length} match scores`); }
@@ -184,8 +186,6 @@ async function main() {
 
   console.log('📊 Fetching WC standings...');
   const standingsData = await footballFetch('/competitions/WC/standings?season=2026');
-
-  // Only use TOTAL standings type
   const totalStandings = standingsData.standings.filter(s => s.type === 'TOTAL');
   const standingsToUse = totalStandings.length > 0 ? totalStandings : standingsData.standings;
 
@@ -210,7 +210,6 @@ async function main() {
     }
   }
 
-  // Fix goals using actual match scores
   const correctedStandings = calculateStatsFromMatches(standings, matchData.matches);
   console.log(`📊 Processing ${correctedStandings.length} standings with match-corrected goals`);
 
