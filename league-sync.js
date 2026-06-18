@@ -266,7 +266,7 @@ async function syncTeams(league, apiTeams) {
         updatedIds.push(created.id);
         console.log(`    ➕ Created team: ${t.name}`);
       }
-      await sleep(1200);
+      await sleep(500);
     } catch (err) {
       console.error(`    ❌ Team ${t.name}: ${err.message}`);
     }
@@ -363,7 +363,7 @@ async function syncStandings(league, apiStandings) {
         updatedIds.push(created.id);
         console.log(`    ➕ Created standing: ${teamName}`);
       }
-      await sleep(1200);
+      await sleep(500);
     } catch (err) {
       console.error(`    ❌ Standing ${teamName}: ${err.message}`);
     }
@@ -474,7 +474,7 @@ async function syncMatches(league, apiMatches) {
         // Track created item ID for featured match logic
         if (String(m.id) === featuredMatchId) featuredMatchId = created.id;
       }
-      await sleep(1200);
+      await sleep(500);
     } catch (err) {
       console.error(`    ❌ Match ${m.homeTeam.name} vs ${m.awayTeam.name}: ${err.message}`);
     }
@@ -563,7 +563,7 @@ async function syncTopScorers(league, apiScorers) {
         updatedIds.push(created.id);
         console.log(`    ➕ Created scorer: ${s.player.name}`);
       }
-      await sleep(1200);
+      await sleep(500);
     } catch (err) {
       console.error(`    ❌ Scorer ${s.player.name}: ${err.message}`);
     }
