@@ -412,9 +412,10 @@ async function syncMatches(league, apiMatches) {
     const awayTeam = teamBySlug.get(awaySlug) || teamByName.get(m.awayTeam.name.toLowerCase());
 
     // Determine status
-    let status = 'NS';
-    if (m.status === 'FINISHED') status = 'FT';
-    else if (m.status === 'IN_PLAY' || m.status === 'PAUSED' || m.status === 'HALFTIME') status = 'LIVE';
+    // Map to Webflow Option field values: Upcoming, Live, Played
+    let status = 'Upcoming';
+    if (m.status === 'FINISHED') status = 'Played';
+    else if (m.status === 'IN_PLAY' || m.status === 'PAUSED' || m.status === 'HALFTIME') status = 'Live';
 
     // Round label — handle both matchday and knockout rounds
     let roundLabel = '';
@@ -422,7 +423,7 @@ async function syncMatches(league, apiMatches) {
     else if (m.stage) roundLabel = m.stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
     // Featured match — next upcoming after now
-    const isUpcoming = status === 'NS' && matchDate > now;
+    const isUpcoming = status === 'Upcoming' && matchDate > now;
     if (isUpcoming && (!featuredMatchDate || matchDate < featuredMatchDate)) {
       featuredMatchDate = matchDate;
       featuredMatchId = String(m.id);
