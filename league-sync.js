@@ -97,18 +97,32 @@ async function footballFetch(path) {
 // ── SUPABASE ──────────────────────────────────────────────────
 async function supabaseUpsert(table, data) {
   if (!data || (Array.isArray(data) && data.length === 0)) return;
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates,return=minimal'
-    },
-    body: JSON.stringify(data)
-  });
+  const tryUpsert = async (payload) => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+    return res;
+  };
+  const res = await tryUpsert(data);
   if (!res.ok) {
     const err = await res.text();
+    if (err.includes('23505') && Array.isArray(data)) {
+      console.log(`  ⚠️ Bulk upsert conflict on ${table}, retrying row by row...`);
+      let ok = 0;
+      for (const row of data) {
+        const r2 = await tryUpsert(row);
+        if (r2.ok) ok++;
+      }
+      console.log(`  ✅ Supabase: upserted ${ok}/${data.length} rows to ${table}`);
+      return;
+    }
     throw new Error(`Supabase ${table}: ${err}`);
   }
   const count = Array.isArray(data) ? data.length : 1;
