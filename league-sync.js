@@ -26,14 +26,16 @@ const WF = {
 // webflow_id  = Webflow Leagues collection item ID (created earlier)
 // season      = current season year
 const LEAGUES = [
-  { code: 'PL',  name: 'Premier League',       webflow_id: '6a32a9cb63396a5393212f3a', season: 2026 },
-  { code: 'CL',  name: 'UEFA Champions League', webflow_id: '6a32a9cb63396a5393212f3c', season: 2026 },
-  { code: 'PD',  name: 'La Liga',               webflow_id: '6a32a9cb63396a5393212f3e', season: 2026 },
-  { code: 'BL1', name: 'Bundesliga',            webflow_id: '6a32a9cb63396a5393212f40', season: 2026 },
-  { code: 'SA',  name: 'Serie A',               webflow_id: '6a32a9cb63396a5393212f42', season: 2026 },
-  { code: 'DED', name: 'Eredivisie',            webflow_id: '6a32a9cb63396a5393212f44', season: 2026 },
-  { code: 'FL1', name: 'Ligue 1',               webflow_id: '6a32a9cb63396a5393212f46', season: 2026 },
-  { code: 'BSA', name: 'Brasileiro Série A',    webflow_id: '6a32a9cb63396a5393212f48', season: 2026 },
+  // European leagues: season = year it STARTED (2024 = 2024/25, use 2025 for 2025/26)
+  // Brazilian league: season = calendar year (2025 = current season running Mar-Dec 2025)
+  { code: 'PL',  name: 'Premier League',       webflow_id: '6a32a9cb63396a5393212f3a', season: 2024 },
+  { code: 'CL',  name: 'UEFA Champions League', webflow_id: '6a32a9cb63396a5393212f3c', season: 2024 },
+  { code: 'PD',  name: 'La Liga',               webflow_id: '6a32a9cb63396a5393212f3e', season: 2024 },
+  { code: 'BL1', name: 'Bundesliga',            webflow_id: '6a32a9cb63396a5393212f40', season: 2024 },
+  { code: 'SA',  name: 'Serie A',               webflow_id: '6a32a9cb63396a5393212f42', season: 2024 },
+  { code: 'DED', name: 'Eredivisie',            webflow_id: '6a32a9cb63396a5393212f44', season: 2024 },
+  { code: 'FL1', name: 'Ligue 1',               webflow_id: '6a32a9cb63396a5393212f46', season: 2024 },
+  { code: 'BSA', name: 'Brasileiro Série A',    webflow_id: '6a32a9cb63396a5393212f48', season: 2025 },
 ];
 
 // Zone mappings per league — what positions qualify for what
@@ -217,8 +219,6 @@ async function syncTeams(league, apiTeams) {
       name: t.name,
       slug,
       'short-name': t.tla || t.shortName || t.name.substring(0, 3).toUpperCase(),
-      'primary-color': t.clubColors?.split('/')[0]?.trim()
-        ? `#${t.clubColors.split('/')[0].trim().replace('#', '')}` : '#000000',
       league: league.webflow_id,
       city: t.venue || '',
       founded: t.founded || null,
