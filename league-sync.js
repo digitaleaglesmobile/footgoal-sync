@@ -336,7 +336,7 @@ async function syncStandings(league, apiStandings) {
     });
 
     const fieldData = {
-      name: `${teamName} - ${league.name}`,
+      name: teamName,
       slug: `${teamSlug}-${league.code.toLowerCase()}-standing`,
       team: wfTeam.id,
       league: league.webflow_id,
