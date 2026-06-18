@@ -1,25 +1,42 @@
-name: Footgoal Data Sync
+# .github/workflows/sync.yml
+# Triggered by cron-job.org webhook every 15 minutes
+# Runs World Cup sync (sync.js) AND league sync (league-sync.js)
+# The two syncs are completely independent — one failing does not stop the other
+
+name: footgoal sync
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'  # Runs every 15 minutes
-  workflow_dispatch:        # Manual trigger button in GitHub
+  repository_dispatch:
+    types: [sync]
+  workflow_dispatch: # allows manual trigger from GitHub Actions UI
 
 jobs:
-  sync:
+  world-cup-sync:
+    name: World Cup sync
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Run sync
+      - name: Run World Cup sync
         env:
-          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
+          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
         run: node sync.js
+
+  league-sync:
+    name: League sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run league sync
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
+          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+        run: node league-sync.js
