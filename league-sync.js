@@ -28,14 +28,14 @@ const WF = {
 const LEAGUES = [
   // European leagues: season = year it STARTED (2024 = 2024/25, use 2025 for 2025/26)
   // Brazilian league: season = calendar year (2025 = current season running Mar-Dec 2025)
-  { code: 'PL',  name: 'Premier League',       webflow_id: '6a32a9cb63396a5393212f3a', season: 2024 },
-  { code: 'CL',  name: 'UEFA Champions League', webflow_id: '6a32a9cb63396a5393212f3c', season: 2024 },
-  { code: 'PD',  name: 'La Liga',               webflow_id: '6a32a9cb63396a5393212f3e', season: 2024 },
-  { code: 'BL1', name: 'Bundesliga',            webflow_id: '6a32a9cb63396a5393212f40', season: 2024 },
-  { code: 'SA',  name: 'Serie A',               webflow_id: '6a32a9cb63396a5393212f42', season: 2024 },
-  { code: 'DED', name: 'Eredivisie',            webflow_id: '6a32a9cb63396a5393212f44', season: 2024 },
-  { code: 'FL1', name: 'Ligue 1',               webflow_id: '6a32a9cb63396a5393212f46', season: 2024 },
-  { code: 'BSA', name: 'Brasileiro Série A',    webflow_id: '6a32a9cb63396a5393212f48', season: 2025 },
+  { code: 'PL',  name: 'Premier League',       webflow_id: '6a32a9cb63396a5393212f3a', season: 2025 },
+  { code: 'CL',  name: 'UEFA Champions League', webflow_id: '6a32a9cb63396a5393212f3c', season: 2025 },
+  { code: 'PD',  name: 'La Liga',               webflow_id: '6a32a9cb63396a5393212f3e', season: 2025 },
+  { code: 'BL1', name: 'Bundesliga',            webflow_id: '6a32a9cb63396a5393212f40', season: 2025 },
+  { code: 'SA',  name: 'Serie A',               webflow_id: '6a32a9cb63396a5393212f42', season: 2025 },
+  { code: 'DED', name: 'Eredivisie',            webflow_id: '6a32a9cb63396a5393212f44', season: 2025 },
+  { code: 'FL1', name: 'Ligue 1',               webflow_id: '6a32a9cb63396a5393212f46', season: 2025 },
+  { code: 'BSA', name: 'Brasileiro Série A',    webflow_id: '6a32a9cb63396a5393212f48', season: 2026 },
 ];
 
 // Zone mappings per league — what positions qualify for what
