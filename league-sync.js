@@ -443,6 +443,7 @@ async function syncMatches(league, apiMatches) {
       away_team_name: m.awayTeam.name,
       home_score: m.score?.fullTime?.home ?? null,
       away_score: m.score?.fullTime?.away ?? null,
+      matchweek: m.matchday || null,
       round_label: roundLabel,
       updated_at: new Date().toISOString()
     });
@@ -453,6 +454,8 @@ async function syncMatches(league, apiMatches) {
       league: league.webflow_id,
       'home-team': homeTeam?.id || null,
       'away-team': awayTeam?.id || null,
+      'home-badge': homeTeam?.fieldData?.badge || null,
+      'away-badge': awayTeam?.fieldData?.badge || null,
       'match-date': m.utcDate,
       'round-label': roundLabel,
       'home-score': m.score?.fullTime?.home ?? null,
