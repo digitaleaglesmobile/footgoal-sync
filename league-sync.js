@@ -351,7 +351,8 @@ async function syncStandings(league, apiStandings) {
   }
 
   await supabaseUpsert('league_standings', supaRows);
-  console.log(`  ✅ Standings done: ${updatedIds.length} items`);
+  await wfPublishItems(WF.STANDINGS, updatedIds);
+  console.log(`  ✅ Standings done: ${updatedIds.length} items (published)`);
   return updatedIds;
 }
 
@@ -473,7 +474,8 @@ async function syncMatches(league, apiMatches) {
   }
 
   await supabaseUpsert('league_matches', supaRows);
-  console.log(`  ✅ Matches done: ${updatedIds.length} items`);
+  await wfPublishItems(WF.MATCHES, updatedIds);
+  console.log(`  ✅ Matches done: ${updatedIds.length} items (published)`);
   return updatedIds;
 }
 
@@ -542,7 +544,8 @@ async function syncTopScorers(league, apiScorers) {
   }
 
   await supabaseUpsert('league_scorers', supaRows);
-  console.log(`  ✅ Top scorers done: ${updatedIds.length} items`);
+  await wfPublishItems(WF.TOP_SCORERS, updatedIds);
+  console.log(`  ✅ Top scorers done: ${updatedIds.length} items (published)`);
   return updatedIds;
 }
 
