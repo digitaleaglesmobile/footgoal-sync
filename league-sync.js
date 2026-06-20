@@ -22,12 +22,7 @@ const WF = {
 };
 
 // ── LEAGUE CONFIG ─────────────────────────────────────────────
-// code        = football-data.org competition code
-// webflow_id  = Webflow Leagues collection item ID (created earlier)
-// season      = current season year
 const LEAGUES = [
-  // European leagues: season = year it STARTED (2024 = 2024/25, use 2025 for 2025/26)
-  // Brazilian league: season = calendar year (2025 = current season running Mar-Dec 2025)
   { code: 'PL',  name: 'Premier League',       webflow_id: '6a32a9cb63396a5393212f3a', season: 2025 },
   { code: 'CL',  name: 'UEFA Champions League', webflow_id: '6a32a9cb63396a5393212f3c', season: 2025 },
   { code: 'PD',  name: 'La Liga',               webflow_id: '6a32a9cb63396a5393212f3e', season: 2025 },
@@ -38,7 +33,7 @@ const LEAGUES = [
   { code: 'BSA', name: 'Brasileiro Série A',    webflow_id: '6a32a9cb63396a5393212f48', season: 2026 },
 ];
 
-// Zone mappings per league — what positions qualify for what
+// Zone mappings per league
 const ZONE_MAP = {
   PL:  { 1: 'champions-league', 2: 'champions-league', 3: 'champions-league', 4: 'champions-league', 5: 'europa-league', 6: 'uecl', 18: 'relegation', 19: 'relegation', 20: 'relegation' },
   PD:  { 1: 'champions-league', 2: 'champions-league', 3: 'champions-league', 4: 'champions-league', 5: 'europa-league', 6: 'uecl', 18: 'relegation', 19: 'relegation', 20: 'relegation' },
@@ -50,7 +45,6 @@ const ZONE_MAP = {
   BSA: { 1: 'libertadores', 2: 'libertadores', 3: 'libertadores', 4: 'libertadores', 5: 'libertadores', 6: 'libertadores', 7: 'libertadores-q', 8: 'sudamericana', 9: 'sudamericana', 10: 'sudamericana', 11: 'sudamericana', 12: 'sudamericana', 17: 'relegation', 18: 'relegation', 19: 'relegation', 20: 'relegation' },
 };
 
-// Rate limit delay — football-data.org free = 10 calls/min
 const DELAY_MS = 6500;
 
 // ── HELPERS ───────────────────────────────────────────────────
@@ -72,13 +66,12 @@ function getZone(leagueCode, position) {
 
 function getFormString(form) {
   if (!form) return '';
-  // football-data.org returns form as 'W,D,L,W,W' — convert to 'WDLWW'
   return form.replace(/,/g, '').slice(-5);
 }
 
 // ── FOOTBALL-DATA.ORG API ─────────────────────────────────────
 async function footballFetch(path) {
-  await sleep(DELAY_MS); // respect rate limit
+  await sleep(DELAY_MS);
   const res = await fetch(`https://api.football-data.org/v4${path}`, {
     headers: { 'X-Auth-Token': FOOTBALL_KEY }
   });
@@ -184,7 +177,6 @@ async function wfUpdateItem(collectionId, itemId, fieldData) {
 
 async function wfPublishItems(collectionId, itemIds) {
   if (!itemIds || itemIds.length === 0) return;
-  // Publish in batches of 100
   for (let i = 0; i < itemIds.length; i += 100) {
     const batch = itemIds.slice(i, i + 100);
     const res = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items/publish`, {
@@ -203,10 +195,6 @@ async function wfPublishItems(collectionId, itemIds) {
   }
 }
 
-// ── CORE SYNC FUNCTIONS ───────────────────────────────────────
-
-// Build an index of existing Webflow items by a key field
-// Returns Map<keyValue, item>
 function indexBy(items, fieldName) {
   const map = new Map();
   for (const item of items) {
@@ -223,8 +211,6 @@ async function syncTeams(league, apiTeams) {
   const existing = await wfGetAllItems(WF.TEAMS);
   const bySlug = indexBy(existing, 'slug');
   const updatedIds = [];
-
-  // Supabase rows
   const supaRows = [];
 
   for (const t of apiTeams) {
@@ -239,7 +225,6 @@ async function syncTeams(league, apiTeams) {
       stadium: t.venue || '',
     };
 
-    // Badge — football-data provides crest URL
     if (t.crest) {
       fieldData['badge'] = { url: t.crest };
     }
@@ -281,7 +266,6 @@ async function syncTeams(league, apiTeams) {
 async function syncStandings(league, apiStandings) {
   console.log(`  📊 Syncing standings for ${league.name}...`);
 
-  // Get current Webflow teams to build name→id map
   const wfTeams = await wfGetAllItems(WF.TEAMS);
   const teamBySlug = indexBy(wfTeams, 'slug');
   const teamByName = new Map();
@@ -290,8 +274,6 @@ async function syncStandings(league, apiStandings) {
   }
 
   const wfStandings = await wfGetAllItems(WF.STANDINGS);
-
-  // Index existing standings by "league-teamslug" composite key
   const standingIndex = new Map();
   for (const s of wfStandings) {
     const teamRef = s.fieldData?.team;
@@ -310,7 +292,6 @@ async function syncStandings(league, apiStandings) {
     const zone = getZone(league.code, entry.position);
     const form = getFormString(entry.form);
 
-    // Find matching Webflow team
     const wfTeam = teamBySlug.get(teamSlug) || teamByName.get(teamName.toLowerCase());
     if (!wfTeam) {
       console.warn(`    ⚠️ No Webflow team found for: ${teamName}`);
@@ -378,7 +359,6 @@ async function syncStandings(league, apiStandings) {
 async function syncMatches(league, apiMatches) {
   console.log(`  ⚽ Syncing ${apiMatches.length} matches for ${league.name}...`);
 
-  // Get Webflow teams for reference
   const wfTeams = await wfGetAllItems(WF.TEAMS);
   const teamBySlug = indexBy(wfTeams, 'slug');
   const teamByName = new Map();
@@ -386,7 +366,6 @@ async function syncMatches(league, apiMatches) {
     if (t.fieldData?.name) teamByName.set(t.fieldData.name.toLowerCase(), t);
   }
 
-  // Get existing matches for this league
   const wfMatches = await wfGetAllItems(WF.MATCHES);
   const matchByApiId = new Map();
   for (const m of wfMatches) {
@@ -400,7 +379,6 @@ async function syncMatches(league, apiMatches) {
   let featuredMatchId = null;
   let featuredMatchDate = null;
 
-  // Sort matches by date to find next upcoming
   const sortedMatches = [...apiMatches].sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
 
   for (const m of sortedMatches) {
@@ -411,18 +389,14 @@ async function syncMatches(league, apiMatches) {
     const homeTeam = teamBySlug.get(homeSlug) || teamByName.get(m.homeTeam.name.toLowerCase());
     const awayTeam = teamBySlug.get(awaySlug) || teamByName.get(m.awayTeam.name.toLowerCase());
 
-    // Determine status
-    // Map to Webflow Option field values: Upcoming, Live, Played
     let status = 'Upcoming';
     if (m.status === 'FINISHED') status = 'Played';
     else if (m.status === 'IN_PLAY' || m.status === 'PAUSED' || m.status === 'HALFTIME') status = 'Live';
 
-    // Round label — handle both matchday and knockout rounds
     let roundLabel = '';
     if (m.matchday) roundLabel = `Gameweek ${m.matchday}`;
     else if (m.stage) roundLabel = m.stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-    // Featured match — next upcoming after now
     const isUpcoming = status === 'Upcoming' && matchDate > now;
     if (isUpcoming && (!featuredMatchDate || matchDate < featuredMatchDate)) {
       featuredMatchDate = matchDate;
@@ -462,7 +436,7 @@ async function syncMatches(league, apiMatches) {
       'away-score': m.score?.fullTime?.away ?? null,
       status,
       venue: m.venue || '',
-      'is-featured': false, // set properly below
+      'is-featured': false,
       'api-fixture-id': m.id,
     };
 
@@ -474,7 +448,6 @@ async function syncMatches(league, apiMatches) {
       } else {
         const created = await wfCreateItem(WF.MATCHES, fieldData);
         updatedIds.push(created.id);
-        // Track created item ID for featured match logic
         if (String(m.id) === featuredMatchId) featuredMatchId = created.id;
       }
       await sleep(500);
@@ -483,11 +456,7 @@ async function syncMatches(league, apiMatches) {
     }
   }
 
-  // Set is-featured on the next upcoming match
-  // First reset all matches for this league to is-featured: false
-  // Then set the featured one to true
   if (featuredMatchId) {
-    // Refresh match list to get correct IDs
     const refreshed = await wfGetAllItems(WF.MATCHES);
     const featuredItem = refreshed.find(m =>
       String(m.fieldData?.['api-fixture-id']) === featuredMatchId ||
@@ -525,7 +494,6 @@ async function syncTopScorers(league, apiScorers) {
   const updatedIds = [];
   const supaRows = [];
 
-  // Top 10 only
   const top10 = apiScorers.slice(0, 10);
 
   for (const s of top10) {
@@ -554,6 +522,7 @@ async function syncTopScorers(league, apiScorers) {
       assists: s.assists || 0,
       nationality: s.player.nationality || '',
       season: String(league.season),
+      'scorer-badge': wfTeam?.fieldData?.badge || null,
     };
 
     const existingScorer = scorerBySlug.get(playerSlug);
@@ -586,7 +555,6 @@ async function updateLeagueStats(league, apiStandings, apiMatches) {
   const finishedMatches = apiMatches.filter(m => m.status === 'FINISHED').length;
   const goalsPerGame = finishedMatches > 0 ? (totalGoals / finishedMatches).toFixed(1) : '0.0';
 
-  // Current matchday — highest matchday with at least one finished match
   const playedMatchdays = apiMatches
     .filter(m => m.status === 'FINISHED' && m.matchday)
     .map(m => m.matchday);
@@ -614,50 +582,40 @@ async function main() {
     console.log(`\n🏟️  Processing: ${league.name} (${league.code})`);
 
     try {
-      // 1. Fetch teams
       console.log(`  📡 Fetching teams...`);
       const teamsData = await footballFetch(`/competitions/${league.code}/teams?season=${league.season}`);
       const teams = teamsData.teams || [];
 
-      // 2. Fetch standings
       console.log(`  📡 Fetching standings...`);
       const standingsData = await footballFetch(`/competitions/${league.code}/standings?season=${league.season}`);
-      // Use TOTAL type for leagues with multiple tables (e.g. CL group stage)
       const standingsTables = standingsData.standings || [];
       const totalStandings = standingsTables.find(s => s.type === 'TOTAL');
       const standingsToUse = totalStandings
         ? totalStandings.table
         : (standingsTables[0]?.table || []);
 
-      // 3. Fetch matches
       console.log(`  📡 Fetching matches...`);
       const matchesData = await footballFetch(`/competitions/${league.code}/matches?season=${league.season}`);
       const matches = matchesData.matches || [];
 
-      // 4. Fetch top scorers
       console.log(`  📡 Fetching top scorers...`);
       let scorers = [];
       try {
         const scorersData = await footballFetch(`/competitions/${league.code}/scorers?season=${league.season}&limit=10`);
         scorers = scorersData.scorers || [];
       } catch (err) {
-        // Top scorers not available for all competitions (e.g. CL early stage)
         console.warn(`  ⚠️ Scorers not available: ${err.message}`);
       }
 
-      // 5. Sync to Webflow + Supabase
       await syncTeams(league, teams);
       await syncStandings(league, standingsToUse);
       await syncMatches(league, matches);
       if (scorers.length > 0) await syncTopScorers(league, scorers);
-
-      // 6. Update league stats
       await updateLeagueStats(league, standingsToUse, matches);
 
       console.log(`  🎉 ${league.name} complete`);
 
     } catch (err) {
-      // Log error but continue with next league — don't let one failure stop the rest
       console.error(`  ❌ ${league.name} failed: ${err.message}`);
       console.error(err.stack);
     }
