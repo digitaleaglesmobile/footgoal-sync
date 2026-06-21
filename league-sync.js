@@ -433,6 +433,7 @@ async function syncMatches(league, apiMatches) {
       'away-badge': awayTeam?.fieldData?.badge || null,
       'match-date': m.utcDate,
       'round-label': roundLabel,
+      'matchweek': m.matchday || null,
       'home-score': m.score?.fullTime?.home ?? null,
       'away-score': m.score?.fullTime?.away ?? null,
       status,
