@@ -498,7 +498,8 @@ async function syncTopScorers(league, apiScorers) {
 
   const top10 = apiScorers.slice(0, 10);
 
-  for (const s of top10) {
+  for (let i = 0; i < top10.length; i++) {
+    const s = top10[i];
     const playerSlug = `${slugify(s.player.name)}-${league.code.toLowerCase()}`;
     const teamSlug = slugify(s.team?.name || '');
     const wfTeam = teamBySlug.get(teamSlug) || teamByName.get((s.team?.name || '').toLowerCase());
