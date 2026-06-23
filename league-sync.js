@@ -504,6 +504,9 @@ async function syncTopScorers(league, apiScorers) {
     const playerSlug = `${slugify(s.player.name)}-${league.code.toLowerCase()}`;
     const teamSlug = slugify(s.team?.name || '');
     const wfTeam = teamBySlug.get(teamSlug) || teamByName.get((s.team?.name || '').toLowerCase());
+    if (!wfTeam) {
+      console.warn(`    ⚠️ No team found for scorer: ${s.player.name} (team: ${s.team?.name}, slug: ${teamSlug})`);
+    }
 
     supaRows.push({
       competition_code: league.code,
@@ -527,6 +530,7 @@ async function syncTopScorers(league, apiScorers) {
       nationality: s.player.nationality || '',
       season: String(league.season),
       'scorer-badge': wfTeam?.fieldData?.badge || null,
+      'rank': i + 1,
     };
 
     const existingScorer = scorerBySlug.get(playerSlug);
