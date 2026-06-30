@@ -151,6 +151,11 @@ async function wfCreateItem(collectionId, fieldData) {
     },
     body: JSON.stringify({ fieldData, isDraft: true })
   });
+  if (res.status === 429) {
+    console.warn('  ⏳ Webflow rate limited on CREATE — waiting 60s...');
+    await sleep(60000);
+    return wfCreateItem(collectionId, fieldData);
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Webflow CREATE: ${err}`);
@@ -168,6 +173,11 @@ async function wfUpdateItem(collectionId, itemId, fieldData) {
     },
     body: JSON.stringify({ fieldData })
   });
+  if (res.status === 429) {
+    console.warn('  ⏳ Webflow rate limited on PATCH — waiting 60s...');
+    await sleep(60000);
+    return wfUpdateItem(collectionId, itemId, fieldData);
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Webflow PATCH: ${err}`);
@@ -179,7 +189,7 @@ async function wfPublishItems(collectionId, itemIds) {
   if (!itemIds || itemIds.length === 0) return;
   for (let i = 0; i < itemIds.length; i += 100) {
     const batch = itemIds.slice(i, i + 100);
-    const res = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items/publish`, {
+    let res = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items/publish`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${WEBFLOW_TOKEN}`,
@@ -188,6 +198,19 @@ async function wfPublishItems(collectionId, itemIds) {
       },
       body: JSON.stringify({ itemIds: batch })
     });
+    if (res.status === 429) {
+      console.warn('  ⏳ Webflow rate limited on PUBLISH — waiting 60s...');
+      await sleep(60000);
+      res = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items/publish`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WEBFLOW_TOKEN}`,
+          'Content-Type': 'application/json',
+          'accept': 'application/json'
+        },
+        body: JSON.stringify({ itemIds: batch })
+      });
+    }
     if (!res.ok) {
       const err = await res.text();
       console.warn(`  ⚠️ Publish warning: ${err}`);
@@ -251,7 +274,7 @@ async function syncTeams(league, apiTeams) {
         updatedIds.push(created.id);
         console.log(`    ➕ Created team: ${t.name}`);
       }
-      await sleep(500);
+      await sleep(1000);
     } catch (err) {
       console.error(`    ❌ Team ${t.name}: ${err.message}`);
     }
@@ -344,7 +367,7 @@ async function syncStandings(league, apiStandings) {
         updatedIds.push(created.id);
         console.log(`    ➕ Created standing: ${teamName}`);
       }
-      await sleep(500);
+      await sleep(1000);
     } catch (err) {
       console.error(`    ❌ Standing ${teamName}: ${err.message}`);
     }
@@ -452,7 +475,7 @@ async function syncMatches(league, apiMatches) {
         updatedIds.push(created.id);
         if (String(m.id) === featuredMatchId) featuredMatchId = created.id;
       }
-      await sleep(500);
+      await sleep(1000);
     } catch (err) {
       console.error(`    ❌ Match ${m.homeTeam.name} vs ${m.awayTeam.name}: ${err.message}`);
     }
@@ -543,7 +566,7 @@ async function syncTopScorers(league, apiScorers) {
         updatedIds.push(created.id);
         console.log(`    ➕ Created scorer: ${s.player.name}`);
       }
-      await sleep(500);
+      await sleep(1000);
     } catch (err) {
       console.error(`    ❌ Scorer ${s.player.name}: ${err.message}`);
     }
