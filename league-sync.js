@@ -307,6 +307,7 @@ async function syncStandings(league, apiStandings) {
   }
 
   const updatedIds = [];
+  const updatedTeamIds = []; // ← track teams we update form on
   const supaRows = [];
 
   for (const entry of apiStandings) {
@@ -368,6 +369,18 @@ async function syncStandings(league, apiStandings) {
         console.log(`    ➕ Created standing: ${teamName}`);
       }
       await sleep(1000);
+
+      // ── Write form string back to Teams collection ──
+      if (form && wfTeam?.id) {
+        try {
+          await wfUpdateItem(WF.TEAMS, wfTeam.id, { form });
+          updatedTeamIds.push(wfTeam.id);
+          await sleep(1000);
+        } catch (err) {
+          console.warn(`    ⚠️ Could not update form for team ${teamName}: ${err.message}`);
+        }
+      }
+
     } catch (err) {
       console.error(`    ❌ Standing ${teamName}: ${err.message}`);
     }
@@ -375,6 +388,11 @@ async function syncStandings(league, apiStandings) {
 
   await supabaseUpsert('league_standings', supaRows);
   await wfPublishItems(WF.STANDINGS, updatedIds);
+  // Publish updated team form values
+  if (updatedTeamIds.length > 0) {
+    await wfPublishItems(WF.TEAMS, updatedTeamIds);
+    console.log(`  ✅ Team form values published: ${updatedTeamIds.length} teams`);
+  }
   console.log(`  ✅ Standings done: ${updatedIds.length} items (published)`);
   return updatedIds;
 }
